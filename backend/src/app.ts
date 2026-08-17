@@ -15,6 +15,8 @@ import { SessionStore } from "./services/sessionStore.js";
 
 export function createApp(store = new SessionStore()): Express {
   const app = express();
+  const configuredOrigins = env.CORS_ORIGIN.split(",").map((value) => value.trim());
+  const shouldUpgradeInsecureRequests = configuredOrigins.every((origin) => origin.startsWith("https://"));
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
   app.use((request, response, next) => {
@@ -32,6 +34,7 @@ export function createApp(store = new SessionStore()): Express {
   });
   app.use(helmet({
     contentSecurityPolicy: env.SERVE_STATIC ? {
+      useDefaults: false,
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
@@ -41,11 +44,12 @@ export function createApp(store = new SessionStore()): Express {
         imgSrc: ["'self'", "data:"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
-        frameAncestors: ["'none'"]
+        frameAncestors: ["'none'"],
+        ...(shouldUpgradeInsecureRequests ? { upgradeInsecureRequests: [] } : {})
       }
     } : false
   }));
-  app.use(cors({ origin: env.CORS_ORIGIN.split(",").map((value) => value.trim()) }));
+  app.use(cors({ origin: configuredOrigins }));
   app.use(express.json({ limit: "256kb" }));
   app.use("/api", rateLimit({
     windowMs: env.RATE_LIMIT_WINDOW_MINUTES * 60 * 1000,
@@ -64,7 +68,13 @@ export function createApp(store = new SessionStore()): Express {
   if (env.SERVE_STATIC) {
     const staticDir = resolve(env.STATIC_DIR);
     if (existsSync(staticDir)) {
-      app.use(express.static(staticDir, { index: "index.html", maxAge: "1h" }));
+      app.use(express.static(staticDir, {
+        index: "index.html",
+        maxAge: "1h",
+        setHeaders: (response, filePath) => {
+          if (filePath.endsWith("index.html")) response.setHeader("Cache-Control", "no-cache");
+        }
+      }));
       app.get("*", (_request, response) => response.sendFile(resolve(staticDir, "index.html")));
     } else {
       logger.warn({ staticDir }, "Configured static directory does not exist");
