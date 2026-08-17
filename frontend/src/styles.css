@@ -1,0 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base { * { box-sizing: border-box; } body { margin: 0; min-width: 320px; } button, input, textarea { font: inherit; } button { cursor: pointer; } button:disabled { cursor: not-allowed; opacity: .55; } }
+@layer components {
+  .url-form { @apply flex flex-col gap-2 rounded-2xl border border-slate-700 bg-slate-900/80 p-2 shadow-2xl shadow-black/20 sm:flex-row; }.statement-form { @apply space-y-3; }
+  .url-form input { @apply min-w-0 flex-1 rounded-xl bg-transparent px-3 py-3 text-sm outline-none placeholder:text-slate-500; }
+  button:not(.mode-option) { @apply rounded-xl bg-teal-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-teal-300 disabled:hover:bg-teal-400; }
+  .quiet-button { @apply !bg-transparent !px-3 !py-2 !text-slate-300 hover:!bg-slate-800 hover:!text-white; }
+  .panel { @apply rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-xl shadow-black/10; }
+  .panel-head { @apply flex items-start justify-between gap-4; } .panel-head h1 { @apply font-display text-2xl font-semibold; } .panel-head h2 { @apply font-display text-xl font-semibold; } .panel-head a { @apply whitespace-nowrap text-sm text-teal-300 hover:text-teal-200; }
+  .eyebrow { @apply mb-1 text-[11px] font-semibold uppercase tracking-[.16em] text-teal-300; }
+  .meta-row { @apply mt-5 flex flex-wrap gap-2 text-xs text-slate-300; } .meta-row span, .tag-row span { @apply rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1; }
+  .tag-row { @apply mt-2 flex flex-wrap gap-2 text-xs text-slate-400; }.statement-fallback { @apply block rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-3 text-sm text-slate-200; }.statement-fallback span { @apply mt-1 block text-xs font-normal leading-5 text-slate-400; }.statement-fallback textarea { @apply mt-3 h-36; }.reading { @apply mt-6 space-y-3 text-sm leading-7 text-slate-300; }.reading h2 { @apply pt-2 font-display text-base font-semibold text-slate-100; }.reading p { white-space: pre-wrap; }.source-badge { @apply ml-2 rounded-full border border-slate-700 bg-slate-800 px-2 py-1 align-middle font-sans text-[10px] font-medium uppercase tracking-wide text-slate-400; }
+  .strategy { @apply mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-300; } textarea { @apply mt-3 h-56 w-full resize-y rounded-xl border border-slate-700 bg-slate-950 p-3 font-mono text-sm leading-6 text-slate-200 outline-none ring-teal-400 transition focus:ring-2; }
+  label { @apply text-xs font-medium text-slate-300; } label input { @apply mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-teal-300; }
+  .settings-panel { @apply text-slate-200; }.mode-option { @apply flex rounded-xl border border-slate-700 bg-slate-950 p-3 text-left transition hover:border-slate-500; }.mode-option.selected { @apply border-teal-300 bg-teal-400/10; }.mode-option strong { @apply text-sm; }.mode-option span { @apply mt-1 text-xs text-slate-400; }
+  .feedback { @apply border-teal-900/70; }.feedback.solved { @apply border-emerald-500 bg-emerald-950/30; }.feedback-item { @apply mt-3 rounded-xl border-l-2 border-teal-400 bg-slate-950/60 p-3; }.feedback-item span { @apply text-[11px] font-semibold uppercase tracking-wider text-teal-300; }.feedback-item p { @apply mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-300; }
+  .error-banner { @apply mt-3 rounded-xl border border-rose-900 bg-rose-950/50 px-4 py-3 text-sm text-rose-200; }.hero-title { @apply mt-2 font-display text-4xl font-semibold leading-tight tracking-tight md:text-5xl; }.steps-card { @apply rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900 to-slate-950 p-6; }.steps-card > p { @apply font-display text-xl font-semibold; }.steps-card ol { @apply mt-5 space-y-5 text-sm text-slate-300; }.steps-card b { @apply mr-3 font-mono text-teal-300; }
+}

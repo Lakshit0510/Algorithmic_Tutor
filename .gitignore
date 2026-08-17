@@ -1,0 +1,14 @@
+node_modules/
+.pnpm-store/
+dist/
+.env
+.env.*
+!.env.example
+!.env.production.example
+coverage/
+data/
+*.log
+2025-07 Engineer (Full Stack & AI) Job Description.pdf
+src-tauri/target/
+src-tauri/binaries/*.exe
+src-tauri/resources/models/*.gguf

@@ -1,0 +1,6 @@
+{
+  "buildCommand": "pnpm --filter @algorithmic-tutor/frontend build",
+  "outputDirectory": "frontend/dist",
+  "installCommand": "pnpm install --frozen-lockfile=false",
+  "framework": "vite"
+}

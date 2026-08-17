@@ -1,0 +1,14 @@
+.git/
+.github/
+.agents/
+.codex/
+node_modules/
+**/node_modules/
+**/dist/
+data/
+src-tauri/
+*.log
+.env
+.env.*
+!.env.production.example
+Algorithmic_Tutor_Plan.txt
