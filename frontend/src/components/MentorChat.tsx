@@ -65,7 +65,7 @@ export function MentorChat({ turns, isSolved, busy, onReview }: MentorChatProps)
   return <article className={`panel mentor-chat ${isSolved ? "solved" : ""}`}>
     <div className="panel-head chat-head"><div><p className="eyebrow">Mentor chat</p><h2>{isSolved ? "Approach verified" : `${turns.length} review ${turns.length === 1 ? "round" : "rounds"}`}</h2></div><span className={`chat-status ${isSolved ? "done" : ""}`}>{isSolved ? "Solved" : busy ? "Thinking…" : "In progress"}</span></div>
     <div className="chat-transcript-wrap">
-      <ol ref={transcript} className="chat-transcript" role="log" aria-live="polite" aria-relevant="additions" aria-label="Mentor conversation" aria-busy={busy} onScroll={(event) => {
+      <ol ref={transcript} className="chat-transcript scrollbox" role="log" aria-live="polite" aria-relevant="additions" aria-label="Mentor conversation" aria-busy={busy} onScroll={(event) => {
         shouldFollow.current = nearBottom(event.currentTarget);
         setShowJump(!shouldFollow.current && (turns.length > 0 || Boolean(pendingTurn)));
       }}>
