@@ -20,7 +20,7 @@ function run(command: string, args: string[], cwd: string) {
 async function main() {
   await mkdir(outputDir, { recursive: true });
   await run("pnpm", ["--filter", "@algorithmic-tutor/backend", "build"], root);
-  await run("pnpm", ["exec", "pkg", "--target", "node22-win-x64", "--output", output, "dist/server.js"], backend);
+  await run("pnpm", ["exec", "pkg", "--config", "package.json", "--target", "node22-win-x64", "--output", output, "dist/server.js"], backend);
   // pkg writes directly to output. Verify a non-empty artifact before Tauri starts.
   await access(output);
   if ((await stat(output)).size === 0) throw new Error("Packaged tutor API sidecar is empty.");

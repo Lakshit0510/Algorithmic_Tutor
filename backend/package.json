@@ -33,5 +33,11 @@
     "supertest": "^7.0.0",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
+  },
+  "pkg": {
+    "scripts": [
+      "../node_modules/.pnpm/groq-sdk@*/node_modules/groq-sdk/**/*.js",
+      "../node_modules/.pnpm/openai@*/node_modules/openai/**/*.js"
+    ]
   }
 }
