@@ -17,6 +17,6 @@
     "active": true,
     "targets": ["nsis"],
     "externalBin": ["binaries/tutor-api"],
-    "windows": { "webviewInstallMode": { "type": "embedBootstrapper" }, "nsis": { "installerMode": "currentUser", "displayLanguageSelector": false } }
+    "windows": { "webviewInstallMode": { "type": "embedBootstrapper" }, "nsis": { "installMode": "currentUser", "displayLanguageSelector": false } }
   }
 }
