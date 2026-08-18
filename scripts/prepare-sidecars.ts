@@ -1,11 +1,13 @@
-import { access, mkdir } from "node:fs/promises";
+import { access, mkdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const backend = resolve(root, "backend");
-const output = resolve(root, "src-tauri", "binaries", "tutor-api-x86_64-pc-windows-msvc.exe");
+const outputDir = resolve(root, "src-tauri", "binaries");
+const targetTriple = process.env.TAURI_ENV_TARGET_TRIPLE ?? process.env.TAURI_TARGET_TRIPLE ?? "x86_64-pc-windows-msvc";
+const output = resolve(outputDir, `tutor-api-${targetTriple}.exe`);
 
 function run(command: string, args: string[], cwd: string) {
   return new Promise<void>((resolvePromise, reject) => {
@@ -15,8 +17,16 @@ function run(command: string, args: string[], cwd: string) {
   });
 }
 
-await run("pnpm", ["--filter", "@algorithmic-tutor/backend", "build"], root);
-await run("pnpm", ["exec", "pkg", "--target", "node22-win-x64", "--output", output, "dist/server.js"], backend);
-await mkdir(resolve(root, "src-tauri", "binaries"), { recursive: true });
-// pkg writes directly to output. This verifies that packaging produced a usable artifact.
-await access(output);
+async function main() {
+  await mkdir(outputDir, { recursive: true });
+  await run("pnpm", ["--filter", "@algorithmic-tutor/backend", "build"], root);
+  await run("pnpm", ["exec", "pkg", "--target", "node22-win-x64", "--output", output, "dist/server.js"], backend);
+  // pkg writes directly to output. Verify a non-empty artifact before Tauri starts.
+  await access(output);
+  if ((await stat(output)).size === 0) throw new Error("Packaged tutor API sidecar is empty.");
+}
+
+void main().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -10,10 +10,12 @@
   "scripts": {
     "dev": "concurrently -n api,web -c cyan,magenta \"pnpm --filter @algorithmic-tutor/backend dev\" \"pnpm --filter @algorithmic-tutor/frontend dev\"",
     "build": "pnpm --filter @algorithmic-tutor/backend build && pnpm --filter @algorithmic-tutor/frontend build",
-    "test": "pnpm --filter @algorithmic-tutor/backend test",
+    "test": "pnpm --filter @algorithmic-tutor/backend test && pnpm --filter @algorithmic-tutor/frontend test",
     "lint": "pnpm --filter @algorithmic-tutor/backend lint && pnpm --filter @algorithmic-tutor/frontend lint",
-    "desktop:dev": "pnpm --filter @algorithmic-tutor/frontend tauri dev",
-    "desktop:build": "pnpm --filter @algorithmic-tutor/frontend tauri build",
+    "desktop:dev": "pnpm prepare:sidecars && pnpm --filter @algorithmic-tutor/frontend tauri dev --config ../src-tauri/tauri.conf.json",
+    "desktop:build": "pnpm prepare:sidecars && pnpm --filter @algorithmic-tutor/frontend tauri build --config ../src-tauri/tauri.conf.json",
+    "desktop:build:offline": "pnpm prepare:sidecars && pnpm --filter @algorithmic-tutor/frontend tauri build --config ../src-tauri/tauri.offline.conf.json",
+    "desktop:smoke": "pnpm prepare:sidecars && pnpm --filter @algorithmic-tutor/backend build",
     "prepare:sidecars": "tsx scripts/prepare-sidecars.ts"
   },
   "devDependencies": {

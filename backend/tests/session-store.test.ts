@@ -5,6 +5,7 @@ import type { TutorState } from "../src/types.js";
 const state: TutorState = {
   problemUrl: "https://codeforces.com/problemset/problem/4/A",
   feedbackHistory: [],
+  turns: [],
   isSolved: false,
   llm: { mode: "groq", model: "test-model" }
 };
@@ -23,5 +24,24 @@ describe("anonymous session expiry", () => {
     expect(store.consumeQuota("openai-model-minute", 2, 60_000)).toBe(true);
     expect(store.consumeQuota("openai-model-minute", 2, 60_000)).toBe(true);
     expect(store.consumeQuota("openai-model-minute", 2, 60_000)).toBe(false);
+  });
+
+  it("persists provider metadata without persisting the API key", () => {
+    const store = new SessionStore(":memory:");
+    const profile = store.upsertProviderProfile({
+      id: "ba52e3d6-cb45-4b5d-812a-b07a55f9d01d",
+      label: "My OpenAI",
+      mode: "openai",
+      model: "gpt-5.4-mini",
+      hasCredential: true
+    });
+
+    const stored = store.getProviderProfile(profile.id);
+    expect(stored).toMatchObject({
+      id: profile.id,
+      label: "My OpenAI",
+      hasCredential: true
+    });
+    expect(stored).not.toHaveProperty("secret");
   });
 });

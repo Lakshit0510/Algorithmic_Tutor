@@ -3,9 +3,9 @@ import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { env } from "../config.js";
-import type { TutorSession, TutorState } from "../types.js";
+import type { ProviderProfile, TutorSession, TutorState } from "../types.js";
 
-type SqliteStatement = { run(...values: unknown[]): unknown; get(...values: unknown[]): unknown };
+type SqliteStatement = { run(...values: unknown[]): unknown; get(...values: unknown[]): unknown; all(...values: unknown[]): unknown[] };
 type SqliteDatabase = { exec(sql: string): void; prepare(sql: string): SqliteStatement };
 const require = createRequire(import.meta.url);
 // Vite 5 does not recognise node:sqlite as a builtin during Vitest transforms.
@@ -18,6 +18,13 @@ type SessionRow = {
   created_at: string;
   updated_at: string;
   expires_at: number;
+};
+
+type ProviderProfileRow = {
+  id: string;
+  profile_json: string;
+  created_at: string;
+  updated_at: string;
 };
 
 /**
@@ -50,6 +57,12 @@ export class SessionStore {
         expires_at INTEGER NOT NULL
       ) STRICT;
       CREATE INDEX IF NOT EXISTS api_quotas_expiry_idx ON api_quotas(expires_at);
+      CREATE TABLE IF NOT EXISTS provider_profiles (
+        id TEXT PRIMARY KEY,
+        profile_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
     `);
   }
 
@@ -59,7 +72,25 @@ export class SessionStore {
 
   private fromRow(row: SessionRow | undefined): TutorSession | undefined {
     if (!row) return undefined;
-    return { id: row.id, state: JSON.parse(row.state_json) as TutorState, createdAt: row.created_at, updatedAt: row.updated_at };
+    const state = JSON.parse(row.state_json) as TutorState;
+    // Existing anonymous sessions predate the chat-turn model. Preserve their
+    // mentor feedback without claiming to know the learner text that produced it.
+    if (!state.turns) {
+      state.turns = (state.feedbackHistory ?? []).map((mentorMessage, index) => ({
+        id: `legacy-${index}`,
+        learnerMessage: "Previous learner approach unavailable.",
+        mentorMessage,
+        verdict: index === (state.feedbackHistory?.length ?? 0) - 1 && state.isSolved ? "solved" : "keep_iterating",
+        createdAt: row.updated_at
+      }));
+    }
+    return { id: row.id, state, createdAt: row.created_at, updatedAt: row.updated_at };
+  }
+
+  private profileFromRow(row: ProviderProfileRow | undefined): ProviderProfile | undefined {
+    if (!row) return undefined;
+    const profile = JSON.parse(row.profile_json) as ProviderProfile;
+    return { ...profile, createdAt: row.created_at, updatedAt: row.updated_at };
   }
 
   create(state: TutorState): TutorSession {
@@ -87,6 +118,38 @@ export class SessionStore {
   }
 
   cleanup(): void { this.removeExpired(); }
+
+  listProviderProfiles(): ProviderProfile[] {
+    return this.database.prepare("SELECT id, profile_json, created_at, updated_at FROM provider_profiles ORDER BY updated_at DESC")
+      .all()
+      .map((row) => this.profileFromRow(row as ProviderProfileRow))
+      .filter((profile): profile is ProviderProfile => Boolean(profile));
+  }
+
+  getProviderProfile(id: string): ProviderProfile | undefined {
+    const row = this.database.prepare("SELECT id, profile_json, created_at, updated_at FROM provider_profiles WHERE id = ?").get(id) as ProviderProfileRow | undefined;
+    return this.profileFromRow(row);
+  }
+
+  upsertProviderProfile(input: Omit<ProviderProfile, "createdAt" | "updatedAt">): ProviderProfile {
+    const existing = this.getProviderProfile(input.id);
+    const now = new Date().toISOString();
+    const profile: ProviderProfile = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now
+    };
+    this.database.prepare(`
+      INSERT INTO provider_profiles (id, profile_json, created_at, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at
+    `).run(profile.id, JSON.stringify(profile), profile.createdAt, profile.updatedAt);
+    return profile;
+  }
+
+  deleteProviderProfile(id: string): boolean {
+    const result = this.database.prepare("DELETE FROM provider_profiles WHERE id = ?").run(id) as { changes?: number };
+    return (result.changes ?? 0) > 0;
+  }
 
   /**
    * Durable fixed-window counter used for provider-wide quotas. It is stored

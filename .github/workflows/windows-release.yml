@@ -1,0 +1,60 @@
+name: Publish Windows desktop installer
+
+on:
+  push:
+    tags:
+      - "desktop-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable the repository pnpm version
+        shell: pwsh
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.4 --activate
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+      - name: Validate application
+        run: |
+          pnpm lint
+          pnpm test
+          pnpm build
+      - name: Build and smoke-check backend sidecar
+        run: pnpm desktop:smoke
+      - name: Build NSIS installer
+        run: pnpm desktop:build
+      - name: Write SHA-256 checksum
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path src-tauri/target/release/bundle/nsis -Filter "*-setup.exe" | Select-Object -First 1
+          if (-not $installer) { throw "NSIS installer was not produced." }
+          Get-FileHash -Algorithm SHA256 $installer.FullName | ForEach-Object { "$($_.Hash.ToLower())  $($installer.Name)" } | Set-Content "$($installer.FullName).sha256"
+      - name: Upload pre-release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: algorithmic-tutor-windows-installer
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe.sha256
+      - name: Create draft GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = Get-ChildItem -Path src-tauri/target/release/bundle/nsis -File | Where-Object { $_.Name -like "*-setup.exe" -or $_.Name -like "*-setup.exe.sha256" } | ForEach-Object { $_.FullName }
+          gh release create $env:GITHUB_REF_NAME $files --draft --generate-notes --title "Algorithmic Tutor $env:GITHUB_REF_NAME"

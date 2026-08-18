@@ -1,5 +1,6 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import { z } from "zod";
 import { getLLM } from "../llm/llmFactory.js";
 import { env } from "../config.js";
 import { fetchProblemData } from "../services/codeforces.js";
@@ -12,7 +13,7 @@ const MentorState = Annotation.Root({
   requiredPattern: Annotation<string>,
   strategy: Annotation<string>,
   userPseudocode: Annotation<string>,
-  feedbackHistory: Annotation<string[]>({ reducer: (oldValue, nextValue) => [...oldValue, ...nextValue], default: () => [] }),
+  turns: Annotation<TutorState["turns"]>({ reducer: (_oldValue, nextValue) => nextValue, default: () => [] }),
   feedback: Annotation<string>,
   isSolved: Annotation<boolean>,
   llm: Annotation<TutorState["llm"]>
@@ -35,6 +36,40 @@ function boundedStatement(statement: string): string {
   return `${statement.slice(0, env.MAX_PROMPT_CHARS)}\n\n[Statement truncated to respect the configured request budget.]`;
 }
 
+function boundedPreviousTurns(turns: TutorState["turns"]): string {
+  const recent = turns.slice(-4).map((turn) => `Learner: ${turn.learnerMessage}\nMentor: ${turn.mentorMessage}`).join("\n\n");
+  return recent.length <= 6000 ? recent : recent.slice(-6000);
+}
+
+const reviewResponseSchema = z.object({
+  verdict: z.enum(["solved", "keep_iterating"]),
+  feedback: z.string().min(1).max(5000)
+});
+
+function jsonCandidate(text: string): string {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  return start >= 0 && end > start ? text.slice(start, end + 1) : text;
+}
+
+async function structuredReview(llm: ReturnType<typeof getLLM>, rawText: string): Promise<z.infer<typeof reviewResponseSchema>> {
+  let initial: z.SafeParseReturnType<unknown, z.infer<typeof reviewResponseSchema>>;
+  try { initial = reviewResponseSchema.safeParse(JSON.parse(jsonCandidate(rawText))); }
+  catch { initial = reviewResponseSchema.safeParse(null); }
+  if (initial.success) return initial.data;
+  // One tightly constrained repair attempt makes provider format differences less
+  // likely to change a verdict. A second malformed response is fail-closed.
+  const repair = await llm.invoke([
+    new SystemMessage("Return valid JSON only. Do not add Markdown or commentary."),
+    new HumanMessage(`Convert this mentor response into exactly {"verdict":"solved"|"keep_iterating","feedback":"..."}. Preserve meaning and choose keep_iterating if uncertain.\n\n${rawText.slice(0, 6000)}`)
+  ]);
+  let repaired: z.SafeParseReturnType<unknown, z.infer<typeof reviewResponseSchema>>;
+  try { repaired = reviewResponseSchema.safeParse(JSON.parse(jsonCandidate(messageText(repair.content)))); }
+  catch { repaired = reviewResponseSchema.safeParse(null); }
+  if (repaired.success) return repaired.data;
+  return { verdict: "keep_iterating", feedback: "The mentor returned an invalid review format, so this approach was not marked solved. Please retry your review." };
+}
+
 async function fetchProblem(state: typeof MentorState.State) {
   return { problemData: await fetchProblemData(state.problemUrl, state.suppliedStatement) };
 }
@@ -55,14 +90,13 @@ async function analyzeStrategy(state: typeof MentorState.State) {
 async function evaluatePseudocode(state: typeof MentorState.State) {
   const problem = state.problemData!;
   const llm = getLLM(state.llm);
+  const previousRounds = boundedPreviousTurns(state.turns);
   const response = await llm.invoke([
     new SystemMessage(guardrail),
-    new HumanMessage(`Review the learner's proposed pseudocode against the problem. Required pattern: ${state.requiredPattern}.\nReturn exactly:\nVERDICT: SOLVED only if the approach is both logically complete and asymptotically appropriate; otherwise KEEP_ITERATING.\nFEEDBACK: Explain the single most important correctness or complexity issue, then give up to three conceptual hints. Never give a full algorithm or code.\n\nProblem: ${problem.title}\nConstraints clue: ${problem.constraints}\nStatement: ${boundedStatement(problem.statement)}\n\nLearner pseudocode:\n${state.userPseudocode}`)
+    new HumanMessage(`Review the learner's proposed pseudocode against the problem. Required pattern: ${state.requiredPattern}.\nReturn JSON only in this exact shape: {"verdict":"solved"|"keep_iterating","feedback":"single most important correctness or complexity issue followed by up to three conceptual hints"}. Set verdict to solved only if the approach is logically complete and asymptotically appropriate. Never give code or a complete algorithm.\n\nProblem: ${problem.title}\nConstraints clue: ${problem.constraints}\nStatement: ${boundedStatement(problem.statement)}\n\nPrevious rounds (for continuity; do not repeat resolved advice):\n${previousRounds || "None yet."}\n\nLearner pseudocode:\n${state.userPseudocode}`)
   ]);
-  const text = messageText(response.content).trim();
-  const isSolved = /^VERDICT:\s*SOLVED\b/im.test(text);
-  const feedback = (text.match(/FEEDBACK:\s*([\s\S]+)/i)?.[1] ?? text).trim();
-  return { isSolved, feedback, feedbackHistory: [feedback] };
+  const reviewed = await structuredReview(llm, messageText(response.content).trim());
+  return { isSolved: reviewed.verdict === "solved", feedback: reviewed.feedback };
 }
 
 // The await-user-input node is the UI/API boundary. A learner response starts a new
@@ -92,11 +126,18 @@ export const reviewGraph = new StateGraph(MentorState)
   .compile();
 
 export async function createTutorState(problemUrl: string, llm: TutorState["llm"], suppliedStatement?: string): Promise<TutorState> {
-  const result = await intakeGraph.invoke({ problemUrl, suppliedStatement, llm, feedbackHistory: [], isSolved: false });
+  const result = await intakeGraph.invoke({ problemUrl, suppliedStatement, llm, turns: [], isSolved: false });
   return result as TutorState;
 }
 
-export async function reviewTutorState(state: TutorState, userPseudocode: string): Promise<TutorState> {
-  const result = await reviewGraph.invoke({ ...state, userPseudocode });
-  return { ...state, ...result, userPseudocode } as TutorState;
+export async function reviewTutorState(state: TutorState, userPseudocode: string, clientTurnId: string): Promise<TutorState> {
+  const result = await reviewGraph.invoke({ ...state, turns: state.turns ?? [], userPseudocode });
+  const feedback = result.feedback ?? "The mentor could not produce feedback.";
+  const isSolved = Boolean(result.isSolved);
+  return {
+    ...state,
+    ...result,
+    userPseudocode,
+    turns: [...(state.turns ?? []), { id: clientTurnId, learnerMessage: userPseudocode, mentorMessage: feedback, verdict: isSolved ? "solved" : "keep_iterating", createdAt: new Date().toISOString() }]
+  } as TutorState;
 }

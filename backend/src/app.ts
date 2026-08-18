@@ -11,6 +11,7 @@ import { env } from "./config.js";
 import { AppError, errorHandler } from "./lib/errors.js";
 import { logger } from "./lib/logger.js";
 import { createTutorRouter } from "./routes/tutor.js";
+import { createProviderRouter } from "./routes/providers.js";
 import { SessionStore } from "./services/sessionStore.js";
 
 export function createApp(store = new SessionStore()): Express {
@@ -33,6 +34,11 @@ export function createApp(store = new SessionStore()): Express {
     next();
   });
   app.use(helmet({
+    ...(shouldUpgradeInsecureRequests ? {} : {
+      crossOriginOpenerPolicy: false,
+      originAgentCluster: false,
+      strictTransportSecurity: false
+    }),
     contentSecurityPolicy: env.SERVE_STATIC ? {
       useDefaults: false,
       directives: {
@@ -51,6 +57,13 @@ export function createApp(store = new SessionStore()): Express {
   }));
   app.use(cors({ origin: configuredOrigins }));
   app.use(express.json({ limit: "256kb" }));
+  if (env.APP_MODE === "desktop") {
+    app.use("/api", (request, _response, next) => {
+      const token = request.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+      if (!env.DESKTOP_RUNTIME_TOKEN || token !== env.DESKTOP_RUNTIME_TOKEN) return next(new AppError(401, "Desktop runtime authorization is required."));
+      next();
+    });
+  }
   app.use("/api", rateLimit({
     windowMs: env.RATE_LIMIT_WINDOW_MINUTES * 60 * 1000,
     limit: env.RATE_LIMIT_MAX,
@@ -62,6 +75,7 @@ export function createApp(store = new SessionStore()): Express {
     }
   }));
   app.get("/health", (_request, response) => response.json({ status: "ok" }));
+  app.use("/api", createProviderRouter(store));
   app.use("/api", createTutorRouter(store));
   const cleanupInterval = setInterval(() => store.cleanup(), Math.min(env.SESSION_TTL_MINUTES * 60 * 1000, 15 * 60 * 1000));
   cleanupInterval.unref();

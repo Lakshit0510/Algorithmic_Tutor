@@ -9,7 +9,15 @@ export const logger = pino({
       "req.headers.authorization",
       "req.headers.cookie",
       "req.body",
-      "GROQ_API_KEY"
+      "GROQ_API_KEY",
+      "OPENAI_API_KEY",
+      "ANTHROPIC_API_KEY",
+      "GOOGLE_API_KEY",
+      "apiKey",
+      "secret",
+      "x-api-key",
+      "*.apiKey",
+      "*.secret"
     ],
     remove: true
   }
