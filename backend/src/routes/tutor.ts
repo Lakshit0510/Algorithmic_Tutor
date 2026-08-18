@@ -21,7 +21,7 @@ const problemSchema = z.object({
   profileId: z.string().uuid().optional(),
   llm: llmSchema
 });
-const reviewSchema = z.object({ clientTurnId: z.string().uuid(), pseudocode: z.string().trim().min(20, "Describe at least a few steps of your approach.").max(8000) });
+const reviewSchema = z.object({ clientTurnId: z.string().uuid(), pseudocode: z.string().trim().min(1, "Enter a question or describe your approach.").max(8000) });
 
 export function createTutorRouter(store = new SessionStore()): ExpressRouter {
   const router = Router();

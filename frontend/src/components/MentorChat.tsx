@@ -14,6 +14,17 @@ function nearBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight < 88;
 }
 
+export function createClientTurnId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (typeof globalThis.crypto?.getRandomValues === "function") globalThis.crypto.getRandomValues(bytes);
+  else for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
+}
+
 export function MentorChat({ turns, isSolved, busy, onReview }: MentorChatProps) {
   const [draft, setDraft] = useState("");
   const [pendingTurn, setPendingTurn] = useState<PendingTurn>();
@@ -32,14 +43,16 @@ export function MentorChat({ turns, isSolved, busy, onReview }: MentorChatProps)
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
     const value = draft.trim();
-    if (value.length < 20 || busy || isSolved) return;
-    const id = crypto.randomUUID();
+    if (!value) { setError("Enter a question or describe your approach before sending."); return; }
+    if (busy || isSolved) return;
+    const submittedDraft = draft;
+    const id = createClientTurnId();
     setPendingTurn({ id, learnerMessage: value });
     setError("");
     shouldFollow.current = true;
     try {
       await onReview(value, id);
-      setDraft("");
+      setDraft((current) => current === submittedDraft ? "" : current);
       setPendingTurn(undefined);
     } catch (reason) {
       setPendingTurn(undefined);
@@ -83,8 +96,8 @@ export function MentorChat({ turns, isSolved, busy, onReview }: MentorChatProps)
     </div>
     {isSolved ? <div className="chat-solved" role="status">Your reasoning meets the mentor’s correctness and complexity checks. Start another problem whenever you are ready.</div> : <form className="chat-composer" onSubmit={submit} aria-busy={busy}>
       <label htmlFor="mentor-draft">Your approach <span>Ctrl/Cmd + Enter to send</span></label>
-      <textarea id="mentor-draft" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={onKeyDown} placeholder="Describe the state, operations, invariant, and expected complexity." disabled={busy} aria-invalid={Boolean(error)} aria-describedby={error ? "mentor-error" : undefined} />
-      <div className="chat-composer-foot"><span>{draft.trim().length < 20 ? "Use at least 20 characters." : "The mentor reviews reasoning, not syntax."}</span><button disabled={busy || draft.trim().length < 20}>{busy ? "Reviewing…" : "Review approach"}</button></div>
+      <textarea id="mentor-draft" value={draft} onChange={(event) => { setDraft(event.target.value); if (error) setError(""); }} onKeyDown={onKeyDown} placeholder="Ask a question or describe your approach, invariant, and expected complexity." aria-invalid={Boolean(error)} aria-describedby={error ? "mentor-error" : undefined} />
+      <div className="chat-composer-foot"><span>{busy ? "You can keep typing while the mentor reviews." : "The mentor reviews reasoning, not syntax."}</span><button type="submit" disabled={busy}>{busy ? "Reviewing…" : "Review approach"}</button></div>
       {error && <p id="mentor-error" role="alert" className="chat-error">{error}</p>}
     </form>}
   </article>;

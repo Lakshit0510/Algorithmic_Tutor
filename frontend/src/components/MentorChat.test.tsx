@@ -2,7 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MentorChat } from "./MentorChat";
+import { createClientTurnId, MentorChat } from "./MentorChat";
 
 const existingTurn = {
   id: "e1f91d13-7744-42b9-ba67-4a4b1cb85024",
@@ -19,7 +19,7 @@ function renderChat(onReview = vi.fn().mockResolvedValue(undefined)) {
   return onReview;
 }
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("MentorChat", () => {
   it("renders a paired, scrollable learner and mentor turn", () => {
@@ -38,5 +38,20 @@ describe("MentorChat", () => {
     await waitFor(() => expect(onReview).toHaveBeenCalledWith(
       "I will keep two pointers and prove that each left pointer only moves forward.", expect.any(String)
     ));
+  });
+
+  it("submits a short question from the Review approach button", async () => {
+    const onReview = renderChat();
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/Your approach/), "Why?");
+    await user.click(screen.getByRole("button", { name: "Review approach" }));
+    await waitFor(() => expect(onReview).toHaveBeenCalledWith("Why?", expect.any(String)));
+  });
+
+  it("creates a valid turn ID when randomUUID is unavailable on an HTTP origin", () => {
+    vi.stubGlobal("crypto", {
+      getRandomValues: (bytes: Uint8Array) => { bytes.fill(7); return bytes; }
+    });
+    expect(createClientTurnId()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 });
